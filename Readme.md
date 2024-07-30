@@ -8,7 +8,7 @@ Please use instructions on our [project page](https://www.cmu-exploration.com/ds
 
 ## Usage
 
-The repository has been tested in Ubuntu 18.04 with ROS Melodic and Ubuntu 20.04 with ROS Noetic. Follow instructions in [Autonomous Exploration Development Environment](https://www.cmu-exploration.com/) to setup the development environment. Make sure to checkout the branch that matches the computer setup, compile, and download the simulation environments. To setup DSV Planner, install dependencies with command lines below. Replace 'distribution' with 'melodic' or 'noetic' to match the computer setup.
+The repository has been tested in Ubuntu 22.04 with ROS2 Humble and Ubuntu 24.04 with ROS2 Jazzy. Follow instructions in [Autonomous Exploration Development Environment](https://www.cmu-exploration.com/) to setup the development environment. Make sure to checkout the branch that matches the computer setup, compile, and download the simulation environments. To setup DSV Planner, install dependencies with command lines below. Replace 'distribution' with 'melodic' or 'noetic' to match the computer setup.
 ```bash
 sudo apt update
 sudo apt install ros-distribution-octomap-ros libgoogle-glog-dev libgflags-dev
