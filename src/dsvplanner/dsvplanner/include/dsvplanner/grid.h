@@ -49,7 +49,7 @@ public:
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> terrain_point_cloud_sub_;
   typedef message_filters::sync_policies::ApproximateTime<nav_msgs::msg::Odometry, sensor_msgs::msg::PointCloud2> syncPolicy;
   typedef message_filters::Synchronizer<syncPolicy> Sync;
-  boost::shared_ptr<Sync> sync_;
+  std::shared_ptr<Sync> sync_;
   // std::shared_ptr<message_filters::TimeSynchronizer<nav_msgs::msg::Odometry, sensor_msgs::msg::PointCloud2>> sync_;
 
   // ROS publishers

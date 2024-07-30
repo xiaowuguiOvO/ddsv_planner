@@ -29,8 +29,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <volumetric_map_base/world_base.h>
 
-#include <cv_bridge/cv_bridge.h>
-#include <image_geometry/stereo_camera_model.h>
+#include <cv_bridge/cv_bridge.hpp>
+#include <image_geometry/stereo_camera_model.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <pcl/conversions.h>
