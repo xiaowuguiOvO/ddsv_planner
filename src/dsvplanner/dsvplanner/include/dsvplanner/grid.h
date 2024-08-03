@@ -12,6 +12,7 @@ Hongbiao Zhu(hongbiaz@andrew.cmu.edu)
 
 #include "dsvplanner/drrt_base.h"
 
+#include <float.h>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <nav_msgs/msg/odometry.hpp>

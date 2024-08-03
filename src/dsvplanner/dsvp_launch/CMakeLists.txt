@@ -17,8 +17,7 @@ find_package(std_msgs REQUIRED)
 find_package(dsvplanner REQUIRED)
 find_package(graph_planner REQUIRED)
 find_package(PCL REQUIRED)
-find_package(Eigen REQUIRED)
-include_directories(${Eigen_INCLUDE_DIRS} ${ament_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
+include_directories(${ament_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
 
 add_executable(exploration src/exploration.cpp)
 ament_target_dependencies(exploration

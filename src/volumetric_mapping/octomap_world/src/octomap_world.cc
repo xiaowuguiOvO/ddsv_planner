@@ -33,6 +33,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <octomap_ros/conversions.hpp>
 #include <pcl/conversions.h>
 #include <pcl/filters/filter.h>
+#include <pcl/common/transforms.h>
 #include <pcl_ros/transforms.hpp>
 
 namespace volumetric_mapping
