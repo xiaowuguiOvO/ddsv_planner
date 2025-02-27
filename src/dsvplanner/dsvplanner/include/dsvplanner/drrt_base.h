@@ -42,6 +42,8 @@ struct Params
   ros::Publisher plantimePub_;
   ros::Publisher randomSampledPointsPub_;
   ros::Publisher shutdownSignalPub;
+  //信息增益pub
+  ros::Publisher gainPub_;
 
   double sensorPitch;
   double sensorHorizontalView;

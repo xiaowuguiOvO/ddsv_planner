@@ -1004,6 +1004,10 @@ void dsvplanner_ns::Drrt::publishNode()
 
   geometry_msgs::Point node_position;
   geometry_msgs::Point parent_position;
+
+  // 创建一个新的点云消息来发布增益
+  pcl::PointCloud<pcl::PointXYZI>::Ptr gain_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+
   if (remainingNodeCount_ > 0 && remainingNodeCount_ <= node_array.size())
   {
     for (int i = 0; i < remainingNodeCount_; i++)
@@ -1012,6 +1016,15 @@ void dsvplanner_ns::Drrt::publishNode()
       node_position.y = node_array[i]->state_[1];
       node_position.z = node_array[i]->state_[2];
       node.points.push_back(node_position);
+
+      // 计算每个节点的增益并发布
+      pcl::PointXYZI gain_point;
+      gain_point.x = node_array[i]->state_[0];
+      gain_point.y = node_array[i]->state_[1];
+      gain_point.z = node_array[i]->state_[2];  // 节点位置
+      gain_point.intensity = node_array[i]->gain_;  // 增益值作为强度 (i)
+
+      gain_cloud->points.push_back(gain_point);  // 将增益点加入点云
 
       if (node_array[i]->parent_)
       {
@@ -1044,6 +1057,15 @@ void dsvplanner_ns::Drrt::publishNode()
       node_position.z = node_array[i]->state_[2];
       node.points.push_back(node_position);
 
+      // 计算每个节点的增益并发布
+      pcl::PointXYZI gain_point;
+      gain_point.x = node_array[i]->state_[0];
+      gain_point.y = node_array[i]->state_[1];
+      gain_point.z = node_array[i]->state_[2];  // 节点位置
+      gain_point.intensity = node_array[i]->gain_;  // 增益值作为强度 (i)
+
+      gain_cloud->points.push_back(gain_point);  // 将增益点加入点云
+
       if (node_array[i]->parent_)
       {
         parent_position.x = node_array[i]->parent_->state_[0];
@@ -1066,6 +1088,15 @@ void dsvplanner_ns::Drrt::publishNode()
       node_position.z = node_array[i]->state_[2];
       node.points.push_back(node_position);
 
+      // 计算每个节点的增益并发布
+      pcl::PointXYZI gain_point;
+      gain_point.x = node_array[i]->state_[0];
+      gain_point.y = node_array[i]->state_[1];
+      gain_point.z = node_array[i]->state_[2];  // 节点位置
+      gain_point.intensity = node_array[i]->gain_;  // 增益值作为强度 (i)
+
+      gain_cloud->points.push_back(gain_point);  // 将增益点加入点云
+
       if (node_array[i]->parent_)
       {
         parent_position.x = node_array[i]->parent_->state_[0];
@@ -1079,13 +1110,139 @@ void dsvplanner_ns::Drrt::publishNode()
     params_.newTreePathPub_.publish(node);
     params_.newTreePathPub_.publish(branch);
 
-    // When there is no remaining node, publish an empty one
+    // 当没有剩余节点时，发布空的节点和分支
     node.points.clear();
     branch.points.clear();
     params_.remainingTreePathPub_.publish(node);
     params_.remainingTreePathPub_.publish(branch);
   }
+
+  // 将带有增益的点云消息发布出去
+  sensor_msgs::PointCloud2 gain_msg;
+  pcl::toROSMsg(*gain_cloud, gain_msg);
+  gain_msg.header.stamp = ros::Time::now();
+  gain_msg.header.frame_id = params_.explorationFrame;
+  params_.gainPub_.publish(gain_msg);  // 发布增益数据
 }
+
+// void dsvplanner_ns::Drrt::publishNode()
+// {
+//   sensor_msgs::PointCloud2 random_sampled_points_pc;
+//   pcl::toROSMsg(*sampledPoint_, random_sampled_points_pc);
+//   random_sampled_points_pc.header.frame_id = params_.explorationFrame;
+//   params_.randomSampledPointsPub_.publish(random_sampled_points_pc);
+
+//   visualization_msgs::Marker node;
+//   visualization_msgs::Marker branch;
+//   node.header.stamp = ros::Time::now();
+//   node.header.frame_id = params_.explorationFrame;
+//   node.ns = "drrt_node";
+//   node.type = visualization_msgs::Marker::POINTS;
+//   node.action = visualization_msgs::Marker::ADD;
+//   node.scale.x = params_.kRemainingNodeScaleSize;
+//   node.color.r = 167.0 / 255.0;
+//   node.color.g = 167.0 / 255.0;
+//   node.color.b = 0.0;
+//   node.color.a = 1.0;
+//   node.frame_locked = false;
+
+//   branch.ns = "drrt_branches";
+//   branch.header.stamp = ros::Time::now();
+//   branch.header.frame_id = params_.explorationFrame;
+//   branch.type = visualization_msgs::Marker::LINE_LIST;
+//   branch.action = visualization_msgs::Marker::ADD;
+//   branch.scale.x = params_.kRemainingBranchScaleSize;
+//   branch.color.r = 167.0 / 255.0;
+//   branch.color.g = 167.0 / 255.0;
+//   branch.color.b = 0.0;
+//   branch.color.a = 1.0;
+//   branch.frame_locked = false;
+
+//   geometry_msgs::Point node_position;
+//   geometry_msgs::Point parent_position;
+//   if (remainingNodeCount_ > 0 && remainingNodeCount_ <= node_array.size())
+//   {
+//     for (int i = 0; i < remainingNodeCount_; i++)
+//     {
+//       node_position.x = node_array[i]->state_[0];
+//       node_position.y = node_array[i]->state_[1];
+//       node_position.z = node_array[i]->state_[2];
+      
+//       node.points.push_back(node_position);
+
+//       if (node_array[i]->parent_)
+//       {
+//         parent_position.x = node_array[i]->parent_->state_[0];
+//         parent_position.y = node_array[i]->parent_->state_[1];
+//         parent_position.z = node_array[i]->parent_->state_[2];
+
+//         branch.points.push_back(parent_position);
+//         branch.points.push_back(node_position);
+//       }
+//     }
+//     params_.remainingTreePathPub_.publish(node);
+//     params_.remainingTreePathPub_.publish(branch);
+//     node.points.clear();
+//     branch.points.clear();
+//     node.scale.x = params_.kNewNodeScaleSize;
+//     node.color.r = 167.0 / 255.0;
+//     node.color.g = 0.0 / 255.0;
+//     node.color.b = 167.0 / 255.0;
+//     node.color.a = 1.0;
+//     branch.scale.x = params_.kNewBranchScaleSize;
+//     branch.color.r = 167.0 / 255.0;
+//     branch.color.g = 0.0 / 255.0;
+//     branch.color.b = 167.0 / 255.0;
+//     branch.color.a = 1.0;
+//     for (int i = remainingNodeCount_; i < node_array.size(); i++)
+//     {
+//       node_position.x = node_array[i]->state_[0];
+//       node_position.y = node_array[i]->state_[1];
+//       node_position.z = node_array[i]->state_[2];
+//       node.points.push_back(node_position);
+
+//       if (node_array[i]->parent_)
+//       {
+//         parent_position.x = node_array[i]->parent_->state_[0];
+//         parent_position.y = node_array[i]->parent_->state_[1];
+//         parent_position.z = node_array[i]->parent_->state_[2];
+
+//         branch.points.push_back(parent_position);
+//         branch.points.push_back(node_position);
+//       }
+//     }
+//     params_.newTreePathPub_.publish(node);
+//     params_.newTreePathPub_.publish(branch);
+//   }
+//   else
+//   {
+//     for (int i = 0; i < node_array.size(); i++)
+//     {
+//       node_position.x = node_array[i]->state_[0];
+//       node_position.y = node_array[i]->state_[1];
+//       node_position.z = node_array[i]->state_[2];
+//       node.points.push_back(node_position);
+
+//       if (node_array[i]->parent_)
+//       {
+//         parent_position.x = node_array[i]->parent_->state_[0];
+//         parent_position.y = node_array[i]->parent_->state_[1];
+//         parent_position.z = node_array[i]->parent_->state_[2];
+
+//         branch.points.push_back(parent_position);
+//         branch.points.push_back(node_position);
+//       }
+//     }
+//     params_.newTreePathPub_.publish(node);
+//     params_.newTreePathPub_.publish(branch);
+
+//     // When there is no remaining node, publish an empty one
+//     node.points.clear();
+//     branch.points.clear();
+//     params_.remainingTreePathPub_.publish(node);
+//     params_.remainingTreePathPub_.publish(branch);
+//   }
+// }
 
 void dsvplanner_ns::Drrt::gotoxy(int x, int y)
 {

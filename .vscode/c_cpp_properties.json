@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/meng/Desktop/exploration/dsv_planner/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/dsvplanner/dsvplanner/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/dsvplanner/graph_planner/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/dsvplanner/graph_utils/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/kdtree/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/minkindr/minkindr/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/minkindr_ros/minkindr_conversions/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/dsvplanner/misc_utils/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/volumetric_mapping/octomap_world/include/**",
+        "/home/meng/Desktop/exploration/dsv_planner/src/volumetric_mapping/volumetric_map_base/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

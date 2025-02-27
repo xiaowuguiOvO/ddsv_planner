@@ -315,6 +315,7 @@ bool dsvplanner_ns::drrtPlanner::init()
   params_.plantimePub_ = nh_.advertise<std_msgs::Float32>(plantimePubTopic, 1000);
   params_.nextGoalPub_ = nh_.advertise<geometry_msgs::PointStamped>(nextGoalPubTopic, 1000);
   params_.shutdownSignalPub = nh_.advertise<std_msgs::Bool>(shutDownTopic, 1000);
+  params_.gainPub_ = nh_.advertise<sensor_msgs::PointCloud2>("/gain", 1000);
 
   plannerService_ = nh_.advertiseService(plannerServiceName, &dsvplanner_ns::drrtPlanner::plannerServiceCallback, this);
   cleanFrontierService_ =
