@@ -335,6 +335,7 @@ void DualStateGraph::addNewGlobalVertex(geometry_msgs::Pose& vertex_msg)
     addGlobalEdgeWithoutCheck(prev_track_vertex_idx_, track_globalvertex_idx_, false);
 
     // Also add edges to nearby vertices
+    
     for (auto& graph_vertex : global_graph_.vertices)
     {
       // If within a distance
