@@ -14,7 +14,7 @@ Created by Hongbiao Zhu (hongbiaz@andrew.cmu.edu)
 #include <cstdlib>
 #include <dsvplanner/drrt.h>
 #include <misc_utils/misc_utils.h>
-
+#include "dsvplanner/dynamic_obstacles.h"
 dsvplanner_ns::Drrt::Drrt(volumetric_mapping::OctomapManager* manager, DualStateGraph* graph,
                           DualStateFrontier* frontier, OccupancyGrid* grid)
 {
@@ -22,7 +22,9 @@ dsvplanner_ns::Drrt::Drrt(volumetric_mapping::OctomapManager* manager, DualState
   grid_ = grid;
   dual_state_graph_ = graph;
   dual_state_frontier_ = frontier;
-
+  
+  obstacles_sub_ = nh_.subscribe("/dynamic_obstacles", 1, 
+                                &dsvplanner_ns::Drrt::obstaclesCallback, this);
   ROS_INFO("Successfully launched Drrt node");
 }
 
@@ -55,8 +57,11 @@ void dsvplanner_ns::Drrt::init()
   {
     terrain_voxle_elev_.push_back(params_.kVehicleHeight);
   }
-
   srand((unsigned)time(NULL));
+}
+
+void dsvplanner_ns::Drrt::obstaclesCallback(const geometry_msgs::PoseArray::ConstPtr& msg) {
+  dynamic_obstacles_ = msg->poses;
 }
 
 void dsvplanner_ns::Drrt::setParams(Params params)
@@ -566,10 +571,28 @@ void dsvplanner_ns::Drrt::plannerIterate()
   }
   else
   {
-    if (volumetric_mapping::OctomapManager::CellStatus::kFree ==
-            manager_->getLineStatusBoundingBox(origin, newState, params_.boundingBox) &&
-        (!grid_->collisionCheckByTerrainWithVector(origin, newState)))
-    {  // connection is free
+    bool isFree = false;
+    bool inTerrain = (manager_->getLineStatusBoundingBox(origin, newState, params_.boundingBox) == 
+                  volumetric_mapping::OctomapManager::CellStatus::kFree);
+    bool noCollision = (!grid_->collisionCheckByTerrainWithVector(origin, newState));
+
+    // isFree = (manager_->getLineStatusBoundingBox(origin, newState, params_.boundingBox) == 
+    //               volumetric_mapping::OctomapManager::CellStatus::kFree) &&
+    //               (!grid_->collisionCheckByTerrainWithVector(origin, newState));
+
+    // 检查是否靠近动态障碍物
+    bool nearDynamicObstacles = false;
+    if (!noCollision) {
+      // 如果节点有碰撞，检查一下是不是靠近了动态障碍物
+      nearDynamicObstacles = checkDynamicObstacles(newState);
+    }
+
+    isFree = (inTerrain && noCollision) || (nearDynamicObstacles && inTerrain);
+    // if (volumetric_mapping::OctomapManager::CellStatus::kFree ==
+    //         manager_->getLineStatusBoundingBox(origin, newState, params_.boundingBox) &&
+    //     (!grid_->collisionCheckByTerrainWithVector(origin, newState)))
+    if (isFree)
+    {  // connection is free or near Dynamic Obstacles
       // Create new node and insert into tree
 
       dsvplanner_ns::Node* newNode = new dsvplanner_ns::Node;
@@ -578,7 +601,17 @@ void dsvplanner_ns::Drrt::plannerIterate()
       newNode->distance_ = newParent->distance_ + direction.norm();
       newParent->children_.push_back(newNode);
       newNode->gain_ = gain(newNode->state_);
-
+      
+      // 如果靠近动态障碍物，标记节点
+      if (nearDynamicObstacles) {
+        newNode->near_dynamic_obstacle_ = true;
+        // 可以调整增益值，例如降低增益
+        newNode->gain_ = gain(newNode->state_) * 0.5;  // 降低增益为原来的一半
+        // ROS_INFO_THROTTLE(1.0, "Generated node near dynamic obstacle at (%.2f, %.2f, %.2f)", 
+        //                   newState.x(), newState.y(), newState.z());
+      } else {
+        newNode->gain_ = gain(newNode->state_);
+      }
       kd_insert3(kdTree_, newState.x(), newState.y(), newState.z(), newNode);
 
       geometry_msgs::Pose p1;
@@ -1002,6 +1035,22 @@ void dsvplanner_ns::Drrt::publishNode()
   branch.color.a = 1.0;
   branch.frame_locked = false;
 
+  // 添加动态障碍物节点标记
+  visualization_msgs::Marker dynamic_node;
+  dynamic_node.header.stamp = ros::Time::now();
+  dynamic_node.header.frame_id = params_.explorationFrame;
+  dynamic_node.ns = "drrt_dynamic_node";
+  dynamic_node.type = visualization_msgs::Marker::SPHERE_LIST;  // 使用球体而不是点，更醒目
+  dynamic_node.action = visualization_msgs::Marker::ADD;
+  dynamic_node.scale.x = params_.kRemainingNodeScaleSize * 1.5;  // 更大尺寸
+  dynamic_node.scale.y = params_.kRemainingNodeScaleSize * 1.5;
+  dynamic_node.scale.z = params_.kRemainingNodeScaleSize * 1.5;
+  dynamic_node.color.r = 1.0;  // 红色更醒目
+  dynamic_node.color.g = 0.0;
+  dynamic_node.color.b = 0.0;
+  dynamic_node.color.a = 1.0;
+  dynamic_node.frame_locked = false;
+
   geometry_msgs::Point node_position;
   geometry_msgs::Point parent_position;
 
@@ -1015,16 +1064,22 @@ void dsvplanner_ns::Drrt::publishNode()
       node_position.x = node_array[i]->state_[0];
       node_position.y = node_array[i]->state_[1];
       node_position.z = node_array[i]->state_[2];
-      node.points.push_back(node_position);
+      
+      // 检查节点是否靠近动态障碍物
+      if (node_array[i]->near_dynamic_obstacle_) {
+        dynamic_node.points.push_back(node_position);
+      } else {
+        node.points.push_back(node_position);
+      }
 
       // 计算每个节点的增益并发布
       pcl::PointXYZI gain_point;
       gain_point.x = node_array[i]->state_[0];
       gain_point.y = node_array[i]->state_[1];
-      gain_point.z = node_array[i]->state_[2];  // 节点位置
-      gain_point.intensity = node_array[i]->gain_;  // 增益值作为强度 (i)
+      gain_point.z = node_array[i]->state_[2];
+      gain_point.intensity = node_array[i]->gain_;
 
-      gain_cloud->points.push_back(gain_point);  // 将增益点加入点云
+      gain_cloud->points.push_back(gain_point);
 
       if (node_array[i]->parent_)
       {
@@ -1038,33 +1093,53 @@ void dsvplanner_ns::Drrt::publishNode()
     }
     params_.remainingTreePathPub_.publish(node);
     params_.remainingTreePathPub_.publish(branch);
+    if (!dynamic_node.points.empty()) {
+      ROS_INFO("Publish Remaining Dynamic Nodes");
+      params_.remainingTreePathPub_.publish(dynamic_node);  // 发布动态节点
+    }
+    
+    // 重设节点和分支的外观
     node.points.clear();
     branch.points.clear();
+    dynamic_node.points.clear();
+    
     node.scale.x = params_.kNewNodeScaleSize;
     node.color.r = 167.0 / 255.0;
     node.color.g = 0.0 / 255.0;
     node.color.b = 167.0 / 255.0;
     node.color.a = 1.0;
+    
     branch.scale.x = params_.kNewBranchScaleSize;
     branch.color.r = 167.0 / 255.0;
     branch.color.g = 0.0 / 255.0;
     branch.color.b = 167.0 / 255.0;
     branch.color.a = 1.0;
+    
+    dynamic_node.scale.x = params_.kNewNodeScaleSize * 1.5;
+    dynamic_node.scale.y = params_.kNewNodeScaleSize * 1.5;
+    dynamic_node.scale.z = params_.kNewNodeScaleSize * 1.5;
+    
     for (int i = remainingNodeCount_; i < node_array.size(); i++)
     {
       node_position.x = node_array[i]->state_[0];
       node_position.y = node_array[i]->state_[1];
       node_position.z = node_array[i]->state_[2];
-      node.points.push_back(node_position);
+      
+      // 检查节点是否靠近动态障碍物
+      if (node_array[i]->near_dynamic_obstacle_) {
+        dynamic_node.points.push_back(node_position);
+      } else {
+        node.points.push_back(node_position);
+      }
 
       // 计算每个节点的增益并发布
       pcl::PointXYZI gain_point;
       gain_point.x = node_array[i]->state_[0];
       gain_point.y = node_array[i]->state_[1];
-      gain_point.z = node_array[i]->state_[2];  // 节点位置
-      gain_point.intensity = node_array[i]->gain_;  // 增益值作为强度 (i)
+      gain_point.z = node_array[i]->state_[2];
+      gain_point.intensity = node_array[i]->gain_;
 
-      gain_cloud->points.push_back(gain_point);  // 将增益点加入点云
+      gain_cloud->points.push_back(gain_point);
 
       if (node_array[i]->parent_)
       {
@@ -1078,6 +1153,10 @@ void dsvplanner_ns::Drrt::publishNode()
     }
     params_.newTreePathPub_.publish(node);
     params_.newTreePathPub_.publish(branch);
+    if (!dynamic_node.points.empty()) {
+      ROS_INFO("Publish New Dynamic Nodes");
+      params_.newTreePathPub_.publish(dynamic_node);  // 发布动态节点
+    }
   }
   else
   {
@@ -1086,16 +1165,22 @@ void dsvplanner_ns::Drrt::publishNode()
       node_position.x = node_array[i]->state_[0];
       node_position.y = node_array[i]->state_[1];
       node_position.z = node_array[i]->state_[2];
-      node.points.push_back(node_position);
+      
+      // 检查节点是否靠近动态障碍物
+      if (node_array[i]->near_dynamic_obstacle_) {
+        dynamic_node.points.push_back(node_position);
+      } else {
+        node.points.push_back(node_position);
+      }
 
       // 计算每个节点的增益并发布
       pcl::PointXYZI gain_point;
       gain_point.x = node_array[i]->state_[0];
       gain_point.y = node_array[i]->state_[1];
-      gain_point.z = node_array[i]->state_[2];  // 节点位置
-      gain_point.intensity = node_array[i]->gain_;  // 增益值作为强度 (i)
+      gain_point.z = node_array[i]->state_[2];
+      gain_point.intensity = node_array[i]->gain_;
 
-      gain_cloud->points.push_back(gain_point);  // 将增益点加入点云
+      gain_cloud->points.push_back(gain_point);
 
       if (node_array[i]->parent_)
       {
@@ -1109,22 +1194,35 @@ void dsvplanner_ns::Drrt::publishNode()
     }
     params_.newTreePathPub_.publish(node);
     params_.newTreePathPub_.publish(branch);
+    if (!dynamic_node.points.empty()) {
+      ROS_INFO("Publish New Dynamic Nodes");
+      params_.newTreePathPub_.publish(dynamic_node);  // 发布动态节点
+    }
 
     // 当没有剩余节点时，发布空的节点和分支
     node.points.clear();
     branch.points.clear();
+    dynamic_node.points.clear();
     params_.remainingTreePathPub_.publish(node);
     params_.remainingTreePathPub_.publish(branch);
   }
+  
+  // 在函数结束前添加一个总结打印
+  int total_dynamic_nodes = 0;
+  for (const auto& node_ptr : node_array) {
+    if (node_ptr->near_dynamic_obstacle_) {
+      total_dynamic_nodes++;
+    }
+  }
+  ROS_INFO("Total nodes: %zu, Dynamic nodes: %d", node_array.size(), total_dynamic_nodes);
 
   // 将带有增益的点云消息发布出去
   sensor_msgs::PointCloud2 gain_msg;
   pcl::toROSMsg(*gain_cloud, gain_msg);
   gain_msg.header.stamp = ros::Time::now();
   gain_msg.header.frame_id = params_.explorationFrame;
-  params_.gainPub_.publish(gain_msg);  // 发布增益数据
+  params_.gainPub_.publish(gain_msg);
 }
-
 // void dsvplanner_ns::Drrt::publishNode()
 // {
 //   sensor_msgs::PointCloud2 random_sampled_points_pc;
@@ -1249,4 +1347,28 @@ void dsvplanner_ns::Drrt::gotoxy(int x, int y)
   printf("%c[%d;%df", 0x1B, y, x);
 }
 
+bool dsvplanner_ns::Drrt::checkDynamicObstacles(const StateVec& state) {
+  // 设置距离阈值（多远算"靠近"）
+  const double obstacle_threshold = 3.0;  // 3米内算靠近
+  
+  // 检查每个障碍物
+  for (const auto& obstacle : dynamic_obstacles_) {
+    // 计算节点与障碍物的距离
+    double dx = state[0] - obstacle.position.x;
+    double dy = state[1] - obstacle.position.y;
+    double dz = state[2] - obstacle.position.z;
+    double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
+    
+    ROS_INFO_THROTTLE(1.0, "Node(%.2f, %.2f, %.2f) to Obstacle(%.2f, %.2f, %.2f): distance=%.2f m",
+              state[0], state[1], state[2],
+              obstacle.position.x, obstacle.position.y, obstacle.position.z,
+              distance);
+    
+    // 如果距离小于阈值，返回 true 表示靠近障碍物
+    if (distance < obstacle_threshold) {
+      return true;
+    }
+  }
+  return false;
+}
 #endif

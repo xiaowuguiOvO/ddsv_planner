@@ -113,9 +113,9 @@ bool dsvplanner_ns::drrtPlanner::plannerServiceCallback(dsvplanner::dsvplanner_s
 
   // Publish rrt
   drrt_->publishNode();
-  std::cout << "     New node number is " << drrt_->getNodeCounter() << "\n"
-            << "     Current local RRT size is " << dual_state_graph_->getLocalVertexSize() << "\n"
-            << "     Current global graph size is " << dual_state_graph_->getGlobalVertexSize() << std::endl;
+  // std::cout << "     New node number is " << drrt_->getNodeCounter() << "\n"
+  //           << "     Current local RRT size is " << dual_state_graph_->getLocalVertexSize() << "\n"
+  //           << "     Current global graph size is " << dual_state_graph_->getGlobalVertexSize() << std::endl;
   RRT_generate_over_ = std::chrono::steady_clock::now();
   time_span = RRT_generate_over_ - plan_start_;
   double rrtGenerateTime =
@@ -198,9 +198,9 @@ bool dsvplanner_ns::drrtPlanner::plannerServiceCallback(dsvplanner::dsvplanner_s
   time_span = plan_over_ - plan_start_;
   double plantime =
       double(time_span.count()) * std::chrono::steady_clock::period::num / std::chrono::steady_clock::period::den;
-  std::cout << "     RRT generation lasted  " << rrtGenerateTime << "\n"
-            << "     Computiong gain lasted " << getGainTime << "\n"
-            << "     Total plan lasted " << plantime << std::endl;
+  // std::cout << "     RRT generation lasted  " << rrtGenerateTime << "\n"
+  //           << "     Computiong gain lasted " << getGainTime << "\n"
+  //           << "     Total plan lasted " << plantime << std::endl;
   return true;
 }
 

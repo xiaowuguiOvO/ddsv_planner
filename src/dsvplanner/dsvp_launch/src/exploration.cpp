@@ -21,16 +21,18 @@ Created and maintained by Hongbiao Zhu (hongbiaz@andrew.cmu.edu)
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
 #include <std_srvs/Empty.h>
-
+#include <gazebo_msgs/ModelStates.h> 
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
-
+#include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/Pose.h>
 #include <tf/transform_datatypes.h>
-
+#include <visualization_msgs/MarkerArray.h>
 #include "dsvplanner/clean_frontier_srv.h"
 #include "dsvplanner/dsvplanner_srv.h"
 #include "graph_planner/GraphPlannerCommand.h"
 #include "graph_planner/GraphPlannerStatus.h"
+#include "dsvplanner/dynamic_obstacles.h"
 
 using namespace std::chrono;
 #define cursup "\033[A"
@@ -44,6 +46,7 @@ geometry_msgs::Point home_point;
 graph_planner::GraphPlannerCommand graph_planner_command;
 std_msgs::Float32 effective_time;
 std_msgs::Float32 total_time;
+gazebo_msgs::ModelStates latest_model_state;
 
 bool simulation = false;    // control whether use graph planner to follow path
 bool begin_signal = false;  // trigger the planner
@@ -89,6 +92,19 @@ ros::Subscriber waypoint_sub;
 ros::Subscriber odom_sub;
 ros::Subscriber begin_signal_sub;
 ros::Publisher stop_signal_pub;
+// model state for obstacles
+ros::Subscriber model_state_sub;
+ros::Publisher dynamic_obstacles_marker_pub;
+ros::Publisher obstacles_pose_pub;
+// // dynamic obstacles
+// struct DynamicObstacle {
+//     std::string name;        // 障碍物名称
+//     double x, y, z;         // 位置
+//     double vx, vy, vz;      // 速度
+//     double distance;        // 与机器人的距离
+// };
+// std::vector<DynamicObstacle> dynamic_obstacles;
+void publishDynamicObstaclesMarkers(const geometry_msgs::PoseArray& obstacles_msg);
 
 void gp_status_callback(const graph_planner::GraphPlannerStatus::ConstPtr& msg)
 {
@@ -122,6 +138,124 @@ void begin_signal_callback(const std_msgs::Bool::ConstPtr& msg)
 {
   begin_signal = msg->data;
 }
+
+// void model_state_callback(const gazebo_msgs::ModelStates::ConstPtr& msg)
+// {
+//     // 清空旧数据
+//     dynamic_obstacles.clear();
+    
+//     // 获取机器人位置（假设机器人名称为"robot_name"）
+//     geometry_msgs::Pose robot_pose;
+//     int robot_index = -1;
+//     for(size_t i = 0; i < msg->name.size(); ++i) {
+//         if(msg->name[i] == "robot") {
+//             robot_pose = msg->pose[i];
+//             robot_index = i;
+//             break;
+//         }
+//     }
+    
+//     // 遍历所有模型
+//     for(size_t i = 0; i < msg->name.size(); ++i) {
+//         // 跳过机器人自身
+//         if(msg->name[i].find("person") == 0) {  // 0表示在字符串开始位置找到
+        
+//         DynamicObstacle obstacle;
+//         obstacle.name = msg->name[i];
+        
+//         // 位置
+//         obstacle.x = msg->pose[i].position.x;
+//         obstacle.y = msg->pose[i].position.y;
+//         obstacle.z = msg->pose[i].position.z;
+        
+//         // 速度
+//         obstacle.vx = msg->twist[i].linear.x;
+//         obstacle.vy = msg->twist[i].linear.y;
+//         obstacle.vz = msg->twist[i].linear.z;
+        
+//         // 计算与机器人的距离
+//         obstacle.distance = std::sqrt(
+//             std::pow(obstacle.x - robot_pose.position.x, 2) +
+//             std::pow(obstacle.y - robot_pose.position.y, 2) +
+//             std::pow(obstacle.z - robot_pose.position.z, 2)
+//         );
+        
+//         dynamic_obstacles.push_back(obstacle);
+//         }
+//     }
+    
+//     // 可以按距离排序（可选）
+//     std::sort(dynamic_obstacles.begin(), dynamic_obstacles.end(),
+//               [](const DynamicObstacle& a, const DynamicObstacle& b) {
+//                   return a.distance < b.distance;
+//               });
+              
+//     ROS_INFO_THROTTLE(2.0, "Updated %zu dynamic obstacles", dynamic_obstacles.size());
+//     // 打印最近的机器人信息 
+//     if (!dynamic_obstacles.empty()) {
+//     const DynamicObstacle& nearest = dynamic_obstacles[0];  // 因为之前已经按距离排序
+//     ROS_INFO_THROTTLE(2.0, 
+//         "Nearest obstacle [%s]: "
+//         "Position(%.2f, %.2f, %.2f), "
+//         "Velocity(%.2f, %.2f, %.2f), "
+//         "Distance: %.2f m",
+//         nearest.name.c_str(),
+//         nearest.x, nearest.y, nearest.z,
+//         nearest.vx, nearest.vy, nearest.vz,
+//         nearest.distance
+//     );
+//   } 
+// }
+void model_state_callback(const gazebo_msgs::ModelStates::ConstPtr& msg)
+{
+    // 获取机器人位置（假设机器人名称为"robot"）
+    geometry_msgs::Pose robot_pose;
+    int robot_index = -1;
+    for(size_t i = 0; i < msg->name.size(); ++i) {
+        if(msg->name[i] == "robot") {
+            robot_pose = msg->pose[i];
+            robot_index = i;
+            break;
+        }
+    }
+    
+    // 创建 PoseArray 消息
+    geometry_msgs::PoseArray obstacle_msg;
+    obstacle_msg.header.frame_id = "map";  // 使用世界坐标系
+    obstacle_msg.header.stamp = ros::Time::now();
+    
+    // 遍历所有模型
+    for(size_t i = 0; i < msg->name.size(); ++i) {
+        // 检查模型名称是否以"person"开头
+        if(msg->name[i].find("person") == 0) {  // 0表示在字符串开始位置找到
+            // 计算与机器人的距离
+            double distance = std::sqrt(
+                std::pow(msg->pose[i].position.x - robot_pose.position.x, 2) +
+                std::pow(msg->pose[i].position.y - robot_pose.position.y, 2) +
+                std::pow(msg->pose[i].position.z - robot_pose.position.z, 2)
+            );
+            
+            // 创建并添加到 PoseArray 消息
+            geometry_msgs::Pose pose;
+            pose.position = msg->pose[i].position;  // 位置
+            // 使用方向四元数存储额外信息
+            pose.orientation.x = msg->twist[i].linear.x;  // 速度 x
+            pose.orientation.y = msg->twist[i].linear.y;  // 速度 y
+            pose.orientation.z = msg->twist[i].linear.z;  // 速度 z
+            pose.orientation.w = distance;  // 距离
+            
+            obstacle_msg.poses.push_back(pose);
+        }
+    }
+    
+    // 发布 PoseArray 消息
+    obstacles_pose_pub.publish(obstacle_msg);
+    publishDynamicObstaclesMarkers(obstacle_msg);
+
+    // 可以添加调试信息
+    // ROS_INFO_THROTTLE(2.0, "Published %zu dynamic obstacles", obstacle_msg.poses.size());
+}
+
 
 bool robotPositionChange()
 {
@@ -214,6 +348,9 @@ int main(int argc, char** argv)
   odom_sub = nh.subscribe<nav_msgs::Odometry>(odom_topic, 1, odom_callback);
   begin_signal_sub = nh.subscribe<std_msgs::Bool>(begin_signal_topic, 1, begin_signal_callback);
   stop_signal_pub = nh.advertise<std_msgs::Bool>(stop_signal_topic, 1);
+  model_state_sub = nh.subscribe("/gazebo/model_states", 10, model_state_callback);
+  obstacles_pose_pub = nh.advertise<geometry_msgs::PoseArray>("/dynamic_obstacles", 10);
+  dynamic_obstacles_marker_pub = nh.advertise<visualization_msgs::MarkerArray>("/dynamic_obstacles_markers", 1);
 
   ros::Duration(1.0).sleep();
   ros::spinOnce();
@@ -247,7 +384,7 @@ int main(int argc, char** argv)
           printf(cursclean);
         }
       }
-      std::cout << "Planning iteration " << iteration << std::endl;
+      // std::cout << "Planning iteration " << iteration << std::endl;
       dsvplanner::dsvplanner_srv planSrv;
       dsvplanner::clean_frontier_srv cleanSrv;
       planSrv.request.header.stamp = ros::Time::now();
@@ -376,4 +513,71 @@ int main(int argc, char** argv)
       ros::Duration(0.1).sleep();
     }
   }
+}
+
+void publishDynamicObstaclesMarkers(const geometry_msgs::PoseArray& obstacles_msg)
+{
+    visualization_msgs::MarkerArray marker_array;
+    
+    // 为每个障碍物创建一个marker
+    for(size_t i = 0; i < obstacles_msg.poses.size(); ++i)
+    {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = obstacles_msg.header.frame_id;
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "dynamic_obstacles";
+        marker.id = i;
+        marker.type = visualization_msgs::Marker::SPHERE;
+        marker.action = visualization_msgs::Marker::ADD;
+        
+        // 位置
+        marker.pose.position = obstacles_msg.poses[i].position;
+        marker.pose.orientation.w = 1.0;
+        
+        // 大小
+        marker.scale.x = 0.5;  // 直径
+        marker.scale.y = 0.5;
+        marker.scale.z = 0.5;
+        
+        // 颜色 (红色)
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+        marker.color.a = 0.8;
+        
+        // 添加速度箭头（可选）
+        visualization_msgs::Marker velocity_marker;
+        velocity_marker.header = marker.header;
+        velocity_marker.ns = "dynamic_obstacles_velocity";
+        velocity_marker.id = i;
+        velocity_marker.type = visualization_msgs::Marker::ARROW;
+        velocity_marker.action = visualization_msgs::Marker::ADD;
+        
+        // 箭头起点
+        velocity_marker.points.push_back(obstacles_msg.poses[i].position);
+        
+        // 箭头终点（使用存储在orientation中的速度信息）
+        geometry_msgs::Point end_point;
+        end_point.x = obstacles_msg.poses[i].position.x + obstacles_msg.poses[i].orientation.x;
+        end_point.y = obstacles_msg.poses[i].position.y + obstacles_msg.poses[i].orientation.y;
+        end_point.z = obstacles_msg.poses[i].position.z + obstacles_msg.poses[i].orientation.z;
+        velocity_marker.points.push_back(end_point);
+        
+        // 箭头大小
+        velocity_marker.scale.x = 0.1;  // 箭头轴的直径
+        velocity_marker.scale.y = 0.2;  // 箭头头部的直径
+        velocity_marker.scale.z = 0.0;
+        
+        // 箭头颜色（蓝色）
+        velocity_marker.color.r = 0.0;
+        velocity_marker.color.g = 0.0;
+        velocity_marker.color.b = 1.0;
+        velocity_marker.color.a = 0.8;
+        
+        marker_array.markers.push_back(marker);
+        marker_array.markers.push_back(velocity_marker);
+    }
+    
+    // 发布marker数组
+    dynamic_obstacles_marker_pub.publish(marker_array);
 }

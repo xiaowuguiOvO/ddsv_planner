@@ -107,6 +107,8 @@ public:
   std::vector<Node*> children_;
   double gain_;
   double distance_;
+  bool near_dynamic_obstacle_ = false;
+  double obstacle_distance_ = std::numeric_limits<double>::max(); // 与最近障碍物的距离
 };
 }
 

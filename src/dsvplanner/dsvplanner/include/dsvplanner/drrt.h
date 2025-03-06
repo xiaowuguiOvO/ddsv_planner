@@ -16,6 +16,7 @@ Hongbiao Zhu(hongbiaz@andrew.cmu.edu)
 #include "dsvplanner/grid.h"
 #include "kdtree/kdtree.h"
 #include "octomap_world/octomap_manager.h"
+#include <geometry_msgs/PoseArray.h>
 
 using namespace Eigen;
 namespace dsvplanner_ns
@@ -108,6 +109,11 @@ protected:
   DualStateGraph* dual_state_graph_;
   DualStateFrontier* dual_state_frontier_;
   OccupancyGrid* grid_;
+  ros::Subscriber obstacles_sub_;
+  std::vector<geometry_msgs::Pose> dynamic_obstacles_;
+  ros::NodeHandle nh_;  // 添加 NodeHandle 作为成员变量
+  void obstaclesCallback(const geometry_msgs::PoseArray::ConstPtr& msg);
+  bool checkDynamicObstacles(const Eigen::Vector3d& state);  // 注意：使用 Eigen::Vector3d 而不是 StateVec
 };
 }
 
